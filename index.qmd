@@ -218,7 +218,39 @@ What's wrong with the `lateStatement` assignment and how would you fix it?
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-Adam's answers will be here.
+> **Question 1:**
+>
+> The `dtype` of the `actualShipDate` series can be checked using `shipments_df['actualShipDate'].dtype`. Typically, if the data is properly parsed, this should return `datetime64[ns]`. 
+It's important for both `actualShipDate` and `plannedShipDate` to have the same data type (preferably a datetime type), so comparisons and arithmetic (like subtracting one date from another) work as expected. If they are not the same type (for example, one is a string and the other is datetime), you may get errors or incorrect results.
+>
+> **Question 2:**
+>
+> Comparing dates as strings can lead to unintuitive (incorrect) results because string comparison is lexicographical, not chronological. For example:
+>
+> ```python
+> "04-11-2025" > "05-20-2024"  # Returns False (even though 2025 is after 2024)
+> ```
+> But if these are datetime objects:
+> ```python
+> import pandas as pd
+> pd.to_datetime("2025-04-11") > pd.to_datetime("2024-05-20")  # Returns True
+> ```
+> This is why it's important to always use date/datetime types for comparison, not strings.
+>
+> **Question 3:**
+>
+> The problem is with this line in the `assign` step:
+> ```python
+> lateStatement="Darn Shipment is Late" if shipments_df['is_late'] else "Shipment is on Time"
+> ```
+> Here, `shipments_df['is_late']` is a Series, so the condition does not evaluate as intended—it will error, or always choose one branch. Instead, you should use `np.where` or `df.apply` to set the value for each row. For example:
+> ```python
+> .assign(
+>     lateStatement=lambda df: np.where(df['is_late'], "Darn Shipment is Late", "Shipment is on Time")
+> )
+> ```
+> This will correctly assign the statement row-by-row according to each shipment's lateness.
+
 
 ### 2. Subset: Querying Rows and Filtering Columns
 
@@ -263,7 +295,21 @@ print(late_shipments.head())
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-> Replace this with your answers to the discussion questions
+> **Question 1: Query vs Boolean Indexing**  
+> - `.query('is_late == True')` uses a string expression, which can be more readable for simple filtering, especially if you're familiar with SQL-like syntax.  
+> - `df[df['is_late'] == True]` (Boolean indexing) uses direct column selection and is slightly more flexible for complex conditions (especially where variable interpolation or method chaining is required).
+> - `.query()` is usually more readable when dealing with simple logical conditions and avoids extra brackets, but for more complex operations or when your column names have spaces/special chars, Boolean indexing or `.loc[]` may be necessary.
+>
+> **Question 2: Additional Row Querying**  
+> You can use a variable in `.query()` by using the `@` symbol. For example, if you want rows at least a threshold number of days late:
+>
+> ```python
+> late_threshold = 5
+> very_late_shipments = shipments_with_lateness.query('days_late >= @late_threshold')
+> print(very_late_shipments.head())
+> ```
+> This filters all shipments late by at least 5 days. You can adjust `late_threshold` as needed for different analyses.
+
 
 ### 3. Drop: Removing Unwanted Data
 
@@ -301,7 +347,15 @@ print("Remaining columns:", clean_shipments.columns.tolist())
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-> Replace this with your answers to the discussion questions
+> **Question 1: Drop vs Filter Strategies**  
+> - `.drop(columns=['quantity'])` removes columns you specify by name from the DataFrame, working by exclusion (removing only those columns).  
+> - `.filter(items=[...])` or `.filter(like=...)` selects and keeps only the columns you specify, working by inclusion (keeping only those columns).  
+> - Use `.drop()` when you know which columns are unnecessary and want to remove just them, especially if most columns should be kept. Use `.filter()` when you want to select a specific subset of columns to keep, or when you need to match columns by pattern (e.g., startswith, regex).
+>
+> **Question 2: Handling Missing Data**  
+> - Using `.dropna()` without a `subset` drops any row with a missing value _in any column_, potentially discarding more rows than intended, especially if some columns aren't critical.  
+> - `.dropna(subset=['plannedShipDate', 'actualShipDate'])` only drops rows where those specific date columns are missing, keeping rows where other columns may be missing but dates are present.  
+> - It's important to be selective about which columns to check for missing values because not all missing data is equally problematic. Checking just the key columns (like those needed for your analysis) prevents losing useful data when less important fields have blanks.
 
 ### 4. Sort: Arranging Data
 
@@ -339,7 +393,15 @@ print(sorted_by_lateness[['shipID', 'partID', 'days_late', 'is_late']].head(10))
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-> Replace this with your answers to the discussion questions
+> **Question 1: Sorting Strategies**  
+> - `ascending=False` means the sort is in descending order (highest to lowest), while `ascending=True` sorts in ascending order (lowest to highest). For example, sorting days late with `ascending=False` puts the most late shipments at the top.  
+> - To sort by multiple columns, pass a list of column names and a list of sort directions. For example:  
+>   `df.sort_values(['is_late', 'days_late'], ascending=[False, False])`  
+>   This will put late shipments (`is_late=True`) first, and within each group, sort by highest `days_late`.
+>
+> **Question 2: Index Management**  
+> - We use `.reset_index(drop=True)` after sorting so the DataFrame has a new, cleanly sequential index (0, 1, 2, ...), reflecting the sorted order.  
+> - When you sort without resetting the index, the old row labels stick around and are just rearranged. This can be confusing, especially if the original index had meaning (like row ID or original order) or if you're displaying data to users. Having an index that no longer matches the displayed row order can cause errors when selecting by position or exporting the data. Resetting avoids these issues by making the index match the sorted order.
 
 ### 5. Aggregate: Summarizing Data
 
@@ -379,7 +441,8 @@ print(f"\nOn-time delivery rate: {on_time_rate:.1f}%")
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-> Replace this with your answers to the discussion questions
+**Question 1: Boolean Aggregation**
+- In pandas, Boolean values (`True`/`False`) are treated as `1` and `0` when performing arithmetic operations. So, using `sum()` on a Boolean column counts the number of `True` values—that is, it gives the total number of rows that satisfy the condition (e.g., the number of late shipments if the column is `is_late`). This is why `sum()` on a Boolean column acts as a counter for positive cases.
 
 ### 6. Merge: Combining Information
 
@@ -418,7 +481,17 @@ print(shipments_with_category['prodCategory'].value_counts())
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-> Replace this with your answers to the discussion questions
+> **Question 1: Join Types and Data Loss**  
+> Using `how='left'` in a merge ensures that *all* rows from the left DataFrame (`clean_shipments`) are preserved, even if there is no matching value in the right DataFrame (`product_line_df`). This is generally the safest way to merge when you don't want to accidentally exclude any shipments, which could happen with an `'inner'` or `'right'` join.  
+> To check if any shipments were lost during the merge, compare the number of rows in the DataFrame before and after the merge (e.g., `len(clean_shipments)` vs. `len(shipments_with_category)`). If the count decreases, then some shipments were dropped, which shouldn't happen with `'left'` join.  
+> You can also check which shipments didn't find a match by looking for missing values in the new columns added from the right DataFrame (e.g. `shipments_with_category[shipments_with_category['prodCategory'].isna()]`).
+
+> **Question 2: Key Column Matching**  
+> If there are duplicate `partID` values in `product_line_df`, any shipment row with a matching `partID` will be duplicated in the result for each match. This creates more rows in the merged DataFrame (a "many-to-one" or "many-to-many" effect), which may lead to incorrect downstream analysis. It's important that the key field in the lookup/join DataFrame is unique to avoid introducing these accidental duplicates.
+> To check for lost shipments during the merge, compare the number of rows before and after the merge (e.g., `len(clean_shipments)` vs. `len(shipments_with_category)`). If the counts differ, some rows were lost (which should not happen with a proper left join). You can also inspect rows where the new columns from `product_line_df` are missing (`prodCategory.isna()`) to see which shipments didn't find a matching part.
+>
+> **Question 2: Key Column Matching**
+> If there are duplicate `partID` values in `product_line_df`, the merge will create additional rows in the merged DataFrame for each combination (cartesian join). For example, if one shipment matches two `product_line_df` rows, you'll get two output rows for that shipment, which can lead to unexpected duplication of shipment data. It's important to ensure that the key column (here, `partID`) is unique in the lookup table to avoid this issue.
 
 ### 7. Split-Apply-Combine: Group Analysis
 
@@ -458,7 +531,12 @@ print(service_by_category)
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-> Replace this with your answers to the discussion questions
+> **Answer to Question 1 (GroupBy Mechanics):**  
+> The `.groupby('prodCategory')` operation splits the DataFrame into groups based on unique values in the `prodCategory` column, so all rows with the same product category are grouped together. This allows you to perform calculations or aggregations (like count, mean, sum, etc.) within each group.  
+> We need to use `.agg()` (aggregate) after grouping to specify what summary stats we want for each group (e.g., mean lateness, total late, etc.). If you only use `.groupby()` without an aggregation, you’ll just get a groupby object, not actual results—no calculations are performed until you provide an aggregation function.
+
+> **Answer to Question 2 (Multi-Level Grouping):**  
+> Grouping by `['shipID', 'prodCategory']` means you first split the data by shipment, and then by product category within that shipment. This lets you analyze patterns within each shipment (for example, seeing if a particular shipment includes late items from several categories). In contrast, grouping by just `'prodCategory'` tells you about lateness or other metrics *across all shipments* in each category. Multi-level grouping answers questions about the composition and performance of individual shipments, while single-category grouping summarizes at the product category level overall.
 
 ## Answering A Business Question
 
@@ -502,7 +580,13 @@ print(f"Percentage with multiple categories: {multi_category_shipments['shipID']
 
 #### Briefly Give Answers to the Discussion Questions In This Section
 
-> Replace this with your answers to the discussion questions
+> **Answer to Question 1:**  
+> This analysis answers the business question: *What proportion of shipments contain products from multiple categories, and are those multi-category shipments more likely to contain late deliveries?*  
+> By grouping by both `['shipID', 'prodCategory']`, we can see the lateness status and maximum delay per shipment per category, which enables a deeper look into each shipment's composition.  
+> In contrast, grouping by just `'prodCategory'` would only summarize lateness by product category across all shipments—giving a high-level category performance but missing the cross-category shipment patterns.
+>
+> **Insights for ZappTech's Management:**  
+> Knowing the percentage of multi-category shipments helps management understand customer ordering behavior (e.g., bundling products across categories), which could influence warehouse logistics and fulfillment strategies. If multi-category shipments have higher lateness, that may indicate process bottlenecks or increased operational complexity for combined orders.
 
 ## Student Analysis Section: Mastering Data Manipulation {#student-analysis-section}
 
