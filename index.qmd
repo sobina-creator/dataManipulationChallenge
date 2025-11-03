@@ -624,6 +624,50 @@ print(f"Percentage with multiple categories: {multi_category_shipments['shipID']
 - Support the insights from your discussion questions
 - Be appropriate for a business audience
 - Do not `echo` the code that creates the visualizations
+```{python}
+#| label: service-level-by-category-viz
+#| echo: false
+#| fig-align: center
+#| fig-width: 7
+#| fig-height: 5
+
+# Calculate service level (on-time percentage) by product category
+service_level_df = (
+    shipments_df
+    .merge(product_line_df, on='partID', how='left')
+    .assign(
+        on_time=lambda df: (df['actualShipDate'] <= df['plannedShipDate'])
+    )
+    .groupby('prodCategory')
+    .agg(
+        n_shipments=('shipID', 'nunique'),
+        on_time_count=('on_time', 'sum'),
+        total_rows=('on_time', 'count')
+    )
+    .assign(
+        service_level_pct=lambda df: 100 * df['on_time_count'] / df['total_rows']
+    )
+    .sort_values('service_level_pct', ascending=False)
+)
+
+# Create barplot of service level by product category
+plt.figure(figsize=(7, 5))
+sns.barplot(
+    data=service_level_df.reset_index(),
+    x='service_level_pct', 
+    y='prodCategory', 
+    palette='Blues_d'
+)
+plt.xlabel('Service Level (On-Time Percentage)', fontsize=12)
+plt.ylabel('Product Category', fontsize=12)
+plt.title('Service Level by Product Category', fontsize=14, weight='bold')
+plt.xlim(0, 105)
+plt.grid(axis='x', linestyle='--', alpha=0.4)
+for i, v in enumerate(service_level_df['service_level_pct']):
+    plt.text(v + 1, i, f"{v:.1f}%", va='center', fontsize=11)
+plt.tight_layout()
+plt.show()
+```
 
 ## Challenge Requirements 📋
 
